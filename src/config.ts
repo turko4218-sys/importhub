@@ -26,6 +26,9 @@ export const config = {
     minDelayMs: Number(optional("SCRAPER_MIN_DELAY_MS", "1500")),
     maxDelayMs: Number(optional("SCRAPER_MAX_DELAY_MS", "4000")),
     proxyUrl: optional("SCRAPER_PROXY_URL"),
+    // Cuando pegas una pagina de listado (busqueda/categoria/mas vendidos)
+    // en vez de un producto, cuantos productos como maximo se encolan.
+    listingMaxProducts: Number(optional("AMAZON_LISTING_MAX_PRODUCTS", "40")),
     // Ruta a un binario de Chromium ya instalado. Util cuando el entorno
     // trae un Chromium propio y la version de Playwright instalada no
     // coincide con la que este pre-instalada (evita que intente descargar).

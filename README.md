@@ -118,6 +118,21 @@ Abri **http://localhost:3000** en el navegador:
 La lista de la izquierda muestra todos los jobs encolados con su estado, asi
 podes importar varios links seguidos y despues ir editando uno por uno.
 
+### Importar varios productos de una sola URL (busqueda, categoria, mas vendidos)
+
+Tambien podes pegar una URL de Amazon que **no** sea de un producto puntual,
+sino de un listado: una busqueda (`amazon.com/s?k=...`), una categoria, una
+pagina de "mas vendidos", o la tienda de una marca. El sistema detecta que
+no es un producto unico, entra a esa pagina, saca todos los links de
+producto que encuentra ahi, y los encola automaticamente uno por uno —
+sin que tengas que copiar cada URL a mano.
+
+En la lista de jobs vas a ver ese job marcado como **"📋 Lista"**; cuando
+termina, muestra cuantos productos encontro y encolo, y cada uno aparece
+como un job individual mas abajo, listo para revisar y publicar como
+cualquier otro. La cantidad maxima de productos por listado se controla con
+`AMAZON_LISTING_MAX_PRODUCTS` (40 por defecto).
+
 ## Acceder desde otra PC / por internet (no solo `localhost`)
 
 El servidor ya escucha en todas las interfaces de red, asi que en la misma

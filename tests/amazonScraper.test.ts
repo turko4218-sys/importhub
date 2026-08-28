@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   extractAsinFromUrl,
+  extractAsinsFromHrefs,
   extractBarcode,
   extractModel,
+  isListingUrl,
   parsePrice,
   parseRating,
   parseWeightKg,
@@ -22,6 +24,41 @@ describe("extractAsinFromUrl", () => {
 
   it("retorna null si no encuentra ASIN", () => {
     expect(extractAsinFromUrl("https://www.amazon.com/s?k=zapatos")).toBeNull();
+  });
+});
+
+describe("isListingUrl", () => {
+  it("una pagina de producto (con ASIN) no es un listado", () => {
+    expect(isListingUrl("https://www.amazon.com/Some-Product/dp/B08N5WRWNW")).toBe(false);
+  });
+
+  it("una busqueda es un listado", () => {
+    expect(isListingUrl("https://www.amazon.com/s?k=zapatos")).toBe(true);
+  });
+
+  it("una pagina de mas vendidos es un listado", () => {
+    expect(isListingUrl("https://www.amazon.com/gp/bestsellers/electronics")).toBe(true);
+  });
+
+  it("una tienda de marca es un listado", () => {
+    expect(isListingUrl("https://www.amazon.com/stores/AcmeSound/page/abc123")).toBe(true);
+  });
+});
+
+describe("extractAsinsFromHrefs", () => {
+  it("saca los ASIN unicos de una lista de hrefs, ignorando duplicados y links sin ASIN", () => {
+    const hrefs = [
+      "/Some-Product/dp/B08N5WRWNW/ref=sr_1_1",
+      "/Some-Product/dp/B08N5WRWNW/ref=sr_1_2", // mismo producto, distinto ref
+      "/gp/product/B0C1234567",
+      "/s?k=otra+busqueda",
+      "/gp/help/customer/display.html",
+    ];
+    expect(extractAsinsFromHrefs(hrefs)).toEqual(["B08N5WRWNW", "B0C1234567"]);
+  });
+
+  it("retorna una lista vacia si no hay ningun link de producto", () => {
+    expect(extractAsinsFromHrefs(["/s?k=x", "/gp/help"])).toEqual([]);
   });
 });
 

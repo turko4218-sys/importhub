@@ -1,14 +1,26 @@
 import { Worker, type Job } from "bullmq";
 import { config } from "../config.js";
-import { connection, QUEUE_NAME, type AmazonImportJobData } from "./queue.js";
-import { scrapeAmazonProduct } from "../scraper/amazonScraper.js";
+import { connection, QUEUE_NAME, enqueueAmazonUrls, type AmazonImportJobData } from "./queue.js";
+import { scrapeAmazonProduct, extractProductLinksFromListing, ScrapeError } from "../scraper/amazonScraper.js";
 import { publishListing } from "../mercadolibre/publishProduct.js";
 import { buildInitialListing } from "../services/listing.js";
-import { updateJob } from "../db/jobStore.js";
+import { getJob, updateJob } from "../db/jobStore.js";
 
-async function processImportJob(job: Job<AmazonImportJobData>): Promise<void> {
-  const { jobId, url, autoPublish } = job.data;
+async function processListingJob(jobId: string, url: string, autoPublish: boolean): Promise<void> {
+  console.log(`[worker] Expandiendo listado ${jobId} -> ${url}`);
+  updateJob(jobId, { status: "scraping" });
 
+  const productUrls = await extractProductLinksFromListing(url);
+  if (productUrls.length === 0) {
+    throw new ScrapeError("No se encontraron productos en esa pagina de Amazon.");
+  }
+
+  const childJobs = await enqueueAmazonUrls(productUrls, { autoPublish });
+  updateJob(jobId, { status: "expanded", childJobIds: childJobs.map((job) => job.id) });
+  console.log(`[worker] Listado expandido: ${childJobs.length} productos encolados`);
+}
+
+async function processProductJob(jobId: string, url: string, autoPublish: boolean): Promise<void> {
   console.log(`[worker] Procesando ${jobId} -> ${url}`);
   updateJob(jobId, { status: "scraping" });
 
@@ -27,6 +39,17 @@ async function processImportJob(job: Job<AmazonImportJobData>): Promise<void> {
 
   updateJob(jobId, { status: "published", mercadolibre });
   console.log(`[worker] Publicado en MercadoLibre: ${mercadolibre.permalink}`);
+}
+
+async function processImportJob(job: Job<AmazonImportJobData>): Promise<void> {
+  const { jobId, url, autoPublish } = job.data;
+  const record = getJob(jobId);
+
+  if (record?.kind === "listing") {
+    await processListingJob(jobId, url, autoPublish);
+  } else {
+    await processProductJob(jobId, url, autoPublish);
+  }
 }
 
 const worker = new Worker<AmazonImportJobData>(

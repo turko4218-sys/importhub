@@ -112,7 +112,7 @@ body {
 }
 
 .status-scraped, .status-queued, .status-scraping { background: #fef3c7; color: #92400e; }
-.status-published { background: #dcfce7; color: #166534; }
+.status-published, .status-expanded { background: #dcfce7; color: #166534; }
 .status-failed { background: #fee2e2; color: #991b1b; }
 .status-publishing { background: #dbeafe; color: #1e40af; }
 

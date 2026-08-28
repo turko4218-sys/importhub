@@ -45,15 +45,21 @@ export type JobStatus =
   | "scraped"
   | "publishing"
   | "published"
+  | "expanded"
   | "failed";
+
+export type JobKind = "product" | "listing";
 
 export interface JobRecord {
   id: string;
   url: string;
+  kind: JobKind;
   status: JobStatus;
   error: string | null;
   product: ScrapedProduct | null;
   listing: Listing | null;
+  /** Solo para jobs de tipo "listing": los jobs de producto que se encolaron a partir de esta pagina. */
+  childJobIds: string[] | null;
   mercadolibre: {
     itemId: string | null;
     permalink: string | null;

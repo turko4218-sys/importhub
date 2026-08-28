@@ -24,6 +24,7 @@ function statusLabel(status) {
     scraped: "Listo para revisar",
     publishing: "Publicando",
     published: "Publicado",
+    expanded: "Lista expandida",
     failed: "Fallo",
   };
   return labels[status] || status;
@@ -35,9 +36,14 @@ async function refreshJobList() {
   for (const job of jobs) {
     const li = document.createElement("li");
     li.className = job.id === currentJobId ? "active" : "";
-    const title = job.product?.title || job.url;
+    let title = job.product?.title || job.url;
+    let badgeText = statusLabel(job.status);
+    if (job.kind === "listing") {
+      title = `📋 Lista: ${job.url}`;
+      if (job.status === "expanded") badgeText = `${job.childJobIds?.length ?? 0} productos encolados`;
+    }
     li.innerHTML = `
-      <span class="status-badge status-${job.status}">${statusLabel(job.status)}</span>
+      <span class="status-badge status-${job.status}">${escapeHtml(badgeText)}</span>
       <span class="title">${escapeHtml(title)}</span>
     `;
     li.addEventListener("click", () => selectJob(job.id));
@@ -55,7 +61,27 @@ function renderEmptyEditor() {
   editorEl.innerHTML = '<p class="empty-state">Importa una URL de Amazon o elegi un job de la lista para editarlo.</p>';
 }
 
+function renderListingSummary(job) {
+  const parts = [`<h2>Página con varios productos</h2>`, `<p class="hint">${escapeHtml(job.url)}</p>`];
+
+  if (job.status === "queued" || job.status === "scraping") {
+    parts.push(`<p>Buscando productos en esa página...</p>`);
+  } else if (job.status === "failed") {
+    parts.push(`<p class="hint error">Error: ${escapeHtml(job.error || "desconocido")}</p>`);
+  } else if (job.status === "expanded") {
+    const ids = job.childJobIds || [];
+    parts.push(`<p>Se encontraron y encolaron <strong>${ids.length}</strong> productos. Hacé clic en cada uno en la lista de la izquierda para revisarlo y publicarlo.</p>`);
+  }
+
+  editorEl.innerHTML = parts.join("\n");
+}
+
 function renderEditor(job) {
+  if (job.kind === "listing") {
+    renderListingSummary(job);
+    return;
+  }
+
   const template = document.getElementById("editor-template");
   editorEl.innerHTML = "";
   editorEl.appendChild(template.content.cloneNode(true));

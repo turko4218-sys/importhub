@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
 import { launchBrowser, newContext, humanDelay } from "./browser.js";
+import { config } from "../config.js";
 import type { ScrapedProduct } from "../types.js";
 
 export class ScrapeError extends Error {}
@@ -11,6 +12,25 @@ export function extractAsinFromUrl(url: string): string | null {
     if (match) return match[1];
   }
   return null;
+}
+
+/**
+ * Una URL de Amazon es una "pagina de listado" (busqueda, categoria, mas
+ * vendidos, tienda de una marca, etc.) cuando no apunta a un producto
+ * puntual, es decir, cuando no se le puede sacar un ASIN.
+ */
+export function isListingUrl(url: string): boolean {
+  return extractAsinFromUrl(url) === null;
+}
+
+/** A partir de una lista de hrefs de una pagina, saca los ASIN unicos que encuentra. */
+export function extractAsinsFromHrefs(hrefs: string[]): string[] {
+  const seen = new Set<string>();
+  for (const href of hrefs) {
+    const asin = extractAsinFromUrl(href);
+    if (asin) seen.add(asin);
+  }
+  return Array.from(seen);
 }
 
 /** Normaliza una URL de miniatura de Amazon a la version de mayor resolucion disponible. */
@@ -302,6 +322,48 @@ export async function scrapeAmazonProduct(url: string): Promise<ScrapedProduct> 
     };
 
     return product;
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
+ * Carga una pagina de listado de Amazon (busqueda, categoria, mas
+ * vendidos, tienda de marca) y devuelve las URLs de producto que
+ * encuentra, hasta un maximo configurable.
+ */
+export async function extractProductLinksFromListing(url: string): Promise<string[]> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new ScrapeError(`URL invalida: ${url}`);
+  }
+  if (!/amazon\./i.test(parsed.hostname)) {
+    throw new ScrapeError(`La URL no parece ser de Amazon: ${url}`);
+  }
+
+  const browser = await launchBrowser();
+  try {
+    const context = await newContext(browser);
+    const page = await context.newPage();
+
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    await humanDelay();
+
+    const captchaBlock = await page.$("form[action*='validateCaptcha']");
+    if (captchaBlock) {
+      throw new ScrapeError("Amazon solicito un captcha; reintenta mas tarde o usa un proxy distinto.");
+    }
+
+    const hrefs = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="/dp/"], a[href*="/gp/product/"]'))
+        .map((a) => a.getAttribute("href"))
+        .filter((href): href is string => Boolean(href))
+    );
+
+    const asins = extractAsinsFromHrefs(hrefs).slice(0, config.scraper.listingMaxProducts);
+    return asins.map((asin) => `${parsed.protocol}//${parsed.host}/dp/${asin}`);
   } finally {
     await browser.close();
   }

@@ -3,6 +3,7 @@ import { Redis as IORedis } from "ioredis";
 import { nanoid } from "nanoid";
 import { config } from "../config.js";
 import { createJob } from "../db/jobStore.js";
+import { isListingUrl } from "../scraper/amazonScraper.js";
 import type { EnqueueOptions, JobRecord } from "../types.js";
 
 export const QUEUE_NAME = "amazon-import";
@@ -20,7 +21,7 @@ export interface AmazonImportJobData {
 /** Encola una URL de producto de Amazon para ser scrapeada y opcionalmente publicada en MercadoLibre. */
 export async function enqueueAmazonUrl(url: string, options: EnqueueOptions = {}): Promise<JobRecord> {
   const jobId = nanoid();
-  const record = createJob(jobId, url);
+  const record = createJob(jobId, url, isListingUrl(url) ? "listing" : "product");
 
   const data: AmazonImportJobData = {
     jobId,
