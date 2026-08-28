@@ -48,30 +48,57 @@ publicar; si preferis un flujo 100% automatico podes activar `AUTO_PUBLISH`.
 
 ## Instalacion
 
+### Opcion rapida: un solo comando
+
 ```bash
 npm install
+npm run setup
+```
+
+`npm run setup` instala el navegador de Playwright, crea tu `.env` (a partir
+de `.env.example`, sin pisar uno que ya exista) y levanta Redis (con Docker
+si esta disponible, o con un `redis-server` local si no). Al final te dice
+los proximos pasos.
+
+### Opcion manual
+
+```bash
+npm install
+npx playwright install chromium
 cp .env.example .env
-# completa .env con tus credenciales de MercadoLibre y preferencias de precio
+docker compose up -d          # o un Redis local en el puerto 6379
 ```
 
-### 1. Autorizar la app de MercadoLibre (una sola vez)
+### Autorizar la app de MercadoLibre (opcional, solo para publicar de verdad)
+
+Sin esto podes igual scrapear e revisar productos en el panel; te va a
+hacer falta recien cuando toques "Publicar en MercadoLibre".
+
+1. Crea una app en <https://developers.mercadolibre.com.ar/devcenter> y
+   copia `client_id`, `client_secret` y `redirect_uri` a tu `.env`
+   (`ML_CLIENT_ID`, `ML_CLIENT_SECRET`, `ML_REDIRECT_URI`).
+2. Corre:
+
+   ```bash
+   npm run ml:auth
+   ```
+
+   Te va a mostrar un link para abrir en el navegador, autorizas la app con
+   tu cuenta de MercadoLibre, y pegas de vuelta la URL/codigo de la
+   redireccion. Los tokens quedan guardados en `data/ml-token.json` y se
+   renuevan solos a partir de ahi (no hace falta repetir esto salvo que
+   revoques el acceso).
+
+### Levantar la API y el worker
 
 ```bash
-npm run ml:auth
+npm run dev
 ```
 
-Te va a mostrar un link para abrir en el navegador, autorizas la app con tu
-cuenta de MercadoLibre, y pegas de vuelta la URL/codigo de la redireccion. Los
-tokens quedan guardados en `data/ml-token.json` y se renuevan solos a partir
-de ahi (no hace falta repetir esto salvo que revoques el acceso).
-
-### 2. Levantar Redis, la API y el worker
-
-```bash
-docker compose up -d          # Redis
-npm run dev:api                # API + panel web en http://localhost:3000
-npm run dev:worker             # worker que procesa la cola (en otra terminal)
-```
+Levanta la API (con el panel web) y el worker juntos, en una sola terminal,
+con la salida de cada uno diferenciada por color/prefijo. Si preferis
+verlos por separado, `npm run dev:api` y `npm run dev:worker` en dos
+terminales hacen lo mismo.
 
 ## Uso: panel web (recomendado)
 

@@ -7,3 +7,4 @@ data/*.sqlite-journal
 .ml-token.json
 playwright-report/
 test-results/
+dump.rdb
