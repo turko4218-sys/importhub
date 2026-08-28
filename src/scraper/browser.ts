@@ -13,6 +13,7 @@ export async function humanDelay(): Promise<void> {
 export async function launchBrowser(): Promise<Browser> {
   return chromium.launch({
     headless: true,
+    executablePath: config.scraper.chromiumExecutablePath || undefined,
     proxy: config.scraper.proxyUrl ? { server: config.scraper.proxyUrl } : undefined,
   });
 }

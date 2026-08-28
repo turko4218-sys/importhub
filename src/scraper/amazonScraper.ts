@@ -158,6 +158,16 @@ export function parsePrice(priceText: string | null): { price: number | null; cu
   return { price: Number.isFinite(price) ? price : null, currency };
 }
 
+export function cleanBrand(brand: string | null, specifications: Record<string, string>): string | null {
+  const fromSpecs = specifications["Marca"] ?? specifications["Brand"];
+  if (fromSpecs) return fromSpecs;
+  if (!brand) return null;
+  return brand
+    .replace(/^(visita la tienda de|visit the)\s+/i, "")
+    .replace(/\s+(store|tienda)$/i, "")
+    .trim();
+}
+
 export function parseRating(ratingText: string | null): number | null {
   if (!ratingText) return null;
   const match = ratingText.match(/([0-9](?:[.,][0-9])?)\s*(?:out of|de)/i);
@@ -213,7 +223,7 @@ export async function scrapeAmazonProduct(url: string): Promise<ScrapedProduct> 
       sourceUrl: url,
       asin: extractAsinFromUrl(url),
       title: raw.title,
-      brand: raw.brand,
+      brand: cleanBrand(raw.brand, raw.specifications),
       price,
       currency,
       images: raw.images.map(toHighResImage).filter((value, index, all) => all.indexOf(value) === index).slice(0, 12),
