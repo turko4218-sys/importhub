@@ -1,14 +1,21 @@
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import express from "express";
 import cors from "cors";
 import { z } from "zod";
 import { config } from "../config.js";
 import { enqueueAmazonUrl, enqueueAmazonUrls } from "../queue/queue.js";
 import { getJob, listJobs, updateJob } from "../db/jobStore.js";
-import { publishScrapedProduct } from "../mercadolibre/publishProduct.js";
+import { publishListing } from "../mercadolibre/publishProduct.js";
+import { estimateShippingCostUsd } from "../services/listing.js";
+import type { Listing } from "../types.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static(join(__dirname, "../../public")));
 
 const enqueueSchema = z
   .object({
@@ -51,11 +58,44 @@ app.get("/api/jobs/:id", (req, res) => {
   res.json({ job });
 });
 
-/** Publica manualmente un job que quedo en estado 'scraped' (cuando autoPublish=false). */
+const listingSchema = z.object({
+  title: z.string().min(1).optional(),
+  brand: z.string().nullable().optional(),
+  model: z.string().nullable().optional(),
+  barcode: z.string().nullable().optional(),
+  priceUsd: z.number().positive().nullable().optional(),
+  weightKg: z.number().nonnegative().nullable().optional(),
+  shippingCostUsd: z.number().nonnegative().nullable().optional(),
+  availableOnAmazon: z.boolean().optional(),
+  images: z.array(z.string().url()).optional(),
+  description: z.string().optional(),
+  videos: z.array(z.string()).optional(),
+});
+
+/** Edita los campos del listing antes de publicar (panel de revision). */
+app.patch("/api/jobs/:id/listing", (req, res) => {
+  const job = getJob(req.params.id);
+  if (!job) return res.status(404).json({ error: "Job no encontrado" });
+  if (!job.listing) return res.status(409).json({ error: "El job todavia no tiene datos scrapeados" });
+
+  const parsed = listingSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  let patch = parsed.data;
+  if (patch.weightKg !== undefined && patch.shippingCostUsd === undefined) {
+    patch = { ...patch, shippingCostUsd: estimateShippingCostUsd(patch.weightKg) };
+  }
+
+  const listing: Listing = { ...job.listing, ...patch };
+  const updated = updateJob(job.id, { listing });
+  res.json({ job: updated });
+});
+
+/** Publica manualmente un job ya scrapeado/editado. */
 app.post("/api/jobs/:id/publish", async (req, res) => {
   const job = getJob(req.params.id);
   if (!job) return res.status(404).json({ error: "Job no encontrado" });
-  if (!job.product) {
+  if (!job.listing) {
     return res.status(409).json({ error: "El job todavia no tiene datos scrapeados" });
   }
   if (job.status === "published") {
@@ -64,7 +104,7 @@ app.post("/api/jobs/:id/publish", async (req, res) => {
 
   try {
     updateJob(job.id, { status: "publishing" });
-    const mercadolibre = await publishScrapedProduct(job.product);
+    const mercadolibre = await publishListing(job.listing, job.url);
     const updated = updateJob(job.id, { status: "published", mercadolibre });
     res.json({ job: updated });
   } catch (error) {

@@ -1,10 +1,13 @@
-import type { ScrapedProduct, JobRecord } from "../types.js";
+import type { Listing, JobRecord } from "../types.js";
 import { predictCategory, publishItem } from "./client.js";
-import { mapProductToMercadoLibreItem } from "./mapper.js";
+import { mapListingToMercadoLibreItem } from "./mapper.js";
 
-export async function publishScrapedProduct(product: ScrapedProduct): Promise<NonNullable<JobRecord["mercadolibre"]>> {
-  const categoryId = await predictCategory(product.title);
-  const payload = mapProductToMercadoLibreItem(product, categoryId);
+export async function publishListing(
+  listing: Listing,
+  sourceUrl?: string
+): Promise<NonNullable<JobRecord["mercadolibre"]>> {
+  const categoryId = await predictCategory(listing.title);
+  const payload = mapListingToMercadoLibreItem(listing, categoryId, sourceUrl);
   const result = await publishItem(payload);
 
   return {

@@ -54,7 +54,14 @@ export const config = {
     markupPercent: Number(optional("PRICE_MARKUP_PERCENT", "30")),
   },
 
-  autoPublish: optional("AUTO_PUBLISH", "true").toLowerCase() === "true",
+  shipping: {
+    // Estimacion por defecto del costo de envio internacional (USD) cuando
+    // no se edita manualmente en el panel de revision.
+    costPerKgUsd: Number(optional("INTL_SHIPPING_COST_PER_KG", "8")),
+    baseCostUsd: Number(optional("INTL_SHIPPING_BASE_COST_USD", "5")),
+  },
+
+  autoPublish: optional("AUTO_PUBLISH", "false").toLowerCase() === "true",
 
   dbPath: optional("DB_PATH", "data/importhub.sqlite"),
 };

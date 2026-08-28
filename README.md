@@ -1,33 +1,43 @@
 # importhub
 
 Herramienta que toma URLs de productos de **Amazon**, extrae todos sus datos
-(titulo, precio, descripcion, especificaciones, fotos, etc.) y los publica
-automaticamente como publicaciones en **MercadoLibre**, usando una **cola de
-trabajos** para procesar muchas URLs en secuencia sin bloquear nada.
+(titulo, marca, modelo, precio, peso, descripcion, fotos, etc.), te deja
+**revisar y editar todo en un panel web** (como harias con una ficha de
+producto), y publica el resultado en **MercadoLibre**. Las URLs se procesan
+con una **cola de trabajos** en segundo plano, asi podes tirar varias de
+una sin bloquearte esperando cada scrape.
 
 ## Como funciona
 
 ```
                  POST /api/jobs                 BullMQ (Redis)
 Vos --URL-->  API Express  ------ encola ----->  cola "amazon-import"
-                                                        |
-                                                        v
-                                              Worker (1 job a la vez)
-                                                        |
-                              +-------------------------+-------------------------+
-                              |                                                   |
-                    1) Scrapea Amazon                                  2) Publica en MercadoLibre
-                    (Playwright: titulo, precio,                       (predice categoria, arma el
-                    fotos, descripcion, specs)                         item, sube fotos por URL)
-                              |                                                   |
-                              +-------------------> SQLite (data/importhub.sqlite) <---+
-                                              (estado, resultado y errores de cada job)
+     ^                                                 |
+     |                                                 v
+     |                                       Worker (1 job a la vez)
+     |                                                 |
+     |                                       Scrapea Amazon (Playwright):
+     |                                       titulo, precio, fotos, peso,
+     |                                       modelo, descripcion, specs...
+     |                                                 |
+     |                                                 v
+     |                                    Arma un "listing" editable
+     |                                    (estima envio intl. por peso)
+     |                                                 |
+     +-------- Panel web (/) <---- SQLite (data/importhub.sqlite) --------+
+     |         Importar / editar         (estado y datos de cada job)
+     |         título, precio, peso,
+     |         imagenes, descripcion...
+     v
+  Publicar en MercadoLibre
+  (predice categoria, arma el item, sube fotos por URL)
 ```
 
 Cada URL que encolas se convierte en un **job** con estado:
-`queued -> scraping -> scraped -> publishing -> published` (o `failed` si algo
-sale mal, con el error guardado). Podes consultar el estado de todos los jobs
-en cualquier momento.
+`queued -> scraping -> scraped -> publishing -> published` (o `failed` si
+algo sale mal, con el error guardado). Por defecto (`AUTO_PUBLISH=false`)
+el job se queda en `scraped` esperando que lo revises en el panel antes de
+publicar; si preferis un flujo 100% automatico podes activar `AUTO_PUBLISH`.
 
 ## Requisitos
 
@@ -59,40 +69,48 @@ de ahi (no hace falta repetir esto salvo que revoques el acceso).
 
 ```bash
 docker compose up -d          # Redis
-npm run dev:api                # API en http://localhost:3000
+npm run dev:api                # API + panel web en http://localhost:3000
 npm run dev:worker             # worker que procesa la cola (en otra terminal)
 ```
 
-## Uso
+## Uso: panel web (recomendado)
 
-### Encolar una URL de Amazon (linea de comandos)
+Abri **http://localhost:3000** en el navegador:
+
+1. Pega el link de un producto de Amazon en "Enlace de Amazon" y toca
+   **Importar de Amazon**. El link se encola y en unos segundos el scraper
+   completa el formulario (titulo, marca, modelo, precio, peso, imagenes,
+   descripcion).
+2. Editá lo que necesites: precio, peso, costo de envio internacional
+   (se estima solo por peso, pero es editable), lista de imagenes (una URL
+   por linea, con miniaturas), disponibilidad, descripcion, etc.
+3. Toca **Publicar en MercadoLibre**. Guarda los cambios y publica el item.
+   Si algo falla (precio o imagenes faltantes, error de la API de ML), el
+   error se muestra ahi mismo sin perder lo que editaste.
+
+La lista de la izquierda muestra todos los jobs encolados con su estado, asi
+podes importar varios links seguidos y despues ir editando uno por uno.
+
+## Uso: linea de comandos / API (para lotes grandes)
+
+### Encolar una URL de Amazon
 
 ```bash
 npm run enqueue -- https://www.amazon.com/dp/B08N5WRWNW
 ```
 
-### Encolar varias URLs a la vez
+### Encolar varias URLs a la vez, o un archivo con una URL por linea
 
 ```bash
 npm run enqueue -- https://amazon.com/dp/AAA https://amazon.com/dp/BBB
-```
-
-### Encolar un lote grande desde un archivo (una URL por linea)
-
-```bash
 npm run enqueue -- --file urls.txt
 ```
 
-### Solo scrapear, sin publicar automaticamente
+Todas quedan en estado `scraped` esperando revision en el panel web (o via
+API). Si en cambio queres que se publiquen solas sin revisión manual:
 
 ```bash
-npm run enqueue -- --no-publish https://www.amazon.com/dp/B08N5WRWNW
-```
-
-Despues podes revisar el resultado y publicarlo manualmente:
-
-```bash
-curl -X POST http://localhost:3000/api/jobs/<jobId>/publish
+npm run enqueue -- --publish https://www.amazon.com/dp/B08N5WRWNW
 ```
 
 ### Ver el estado de los jobs
@@ -106,12 +124,13 @@ curl http://localhost:3000/api/jobs/<jobId>
 
 ### API REST
 
-| Metodo | Ruta                       | Descripcion                                   |
-| ------ | -------------------------- | ---------------------------------------------- |
-| POST   | `/api/jobs`                | Encola `{ "url": "..." }` o `{ "urls": [...] }` |
-| GET    | `/api/jobs`                | Lista los jobs mas recientes                   |
-| GET    | `/api/jobs/:id`            | Detalle de un job (incluye datos scrapeados)   |
-| POST   | `/api/jobs/:id/publish`    | Publica manualmente un job ya scrapeado        |
+| Metodo | Ruta                         | Descripcion                                              |
+| ------ | ---------------------------- | --------------------------------------------------------- |
+| POST   | `/api/jobs`                  | Encola `{ "url": "..." }` o `{ "urls": [...] }`            |
+| GET    | `/api/jobs`                  | Lista los jobs mas recientes                               |
+| GET    | `/api/jobs/:id`               | Detalle de un job (producto scrapeado + listing editable) |
+| PATCH  | `/api/jobs/:id/listing`      | Edita campos del listing antes de publicar                |
+| POST   | `/api/jobs/:id/publish`      | Publica en MercadoLibre el listing (editado) del job       |
 
 Ejemplo:
 
@@ -119,31 +138,57 @@ Ejemplo:
 curl -X POST http://localhost:3000/api/jobs \
   -H "Content-Type: application/json" \
   -d '{"url": "https://www.amazon.com/dp/B08N5WRWNW"}'
+
+curl -X PATCH http://localhost:3000/api/jobs/<jobId>/listing \
+  -H "Content-Type: application/json" \
+  -d '{"priceUsd": 45.50, "weightKg": 0.4}'
+
+curl -X POST http://localhost:3000/api/jobs/<jobId>/publish
 ```
 
 ## Que datos extrae el scraper
 
-- Titulo, marca, precio y moneda
+- Titulo, marca, modelo y codigo de barras (UPC/EAN/GTIN, cuando Amazon lo
+  publica)
+- Precio y moneda
+- Peso (convertido a kg desde la ficha tecnica, sea cual sea la unidad
+  original: g, kg, lb, oz)
 - Todas las fotos disponibles (en la resolucion mas alta posible)
 - Descripcion, bullet points y tabla de especificaciones tecnicas
-- Rating, cantidad de reviews y disponibilidad
+- Rating, cantidad de reviews y disponibilidad (en stock / no disponible)
+- Referencias a videos del producto, si Amazon los expone (solo a modo
+  informativo: la API de MercadoLibre no permite publicar videos)
 - ASIN (identificador del producto en Amazon)
 
 Ver `src/types.ts` (`ScrapedProduct`) para el detalle completo.
 
-## Como se arma la publicacion en MercadoLibre
+## El "listing": tu copia editable
 
-`src/mercadolibre/mapper.ts` convierte el producto scrapeado en el payload
-que espera la API de ML:
+Apenas termina el scraping se crea un `listing` (ver `Listing` en
+`src/types.ts`) como copia editable de lo scrapeado: titulo, marca, modelo,
+codigo de barras, precio (USD), peso, costo de envio internacional,
+disponibilidad, imagenes y descripcion. El `product` original scrapeado
+queda intacto como referencia; lo que se edita en el panel y lo que se
+publica en MercadoLibre es siempre el `listing`.
+
+## Como se calcula el precio y el envio
+
+`src/mercadolibre/mapper.ts` arma el payload que espera la API de ML:
 
 - **Categoria**: se predice automaticamente con el endpoint de
   `domain_discovery` de MercadoLibre a partir del titulo.
-- **Precio**: `precio_amazon * PRICE_FX_RATE * (1 + PRICE_MARKUP_PERCENT/100)`,
-  redondeado a 2 decimales. Ajusta `PRICE_FX_RATE` y `PRICE_MARKUP_PERCENT` en
-  `.env` segun tu tipo de cambio y margen deseado.
+- **Costo de envio internacional**: se estima como
+  `INTL_SHIPPING_BASE_COST_USD + peso_kg * INTL_SHIPPING_COST_PER_KG`
+  apenas se scrapea el peso, pero es 100% editable en el panel antes de
+  publicar.
+- **Precio final** (en la moneda del sitio ML):
+  `(precio_usd * PRICE_FX_RATE * (1 + PRICE_MARKUP_PERCENT/100)) + (costo_envio_usd * PRICE_FX_RATE)`.
+  El margen se aplica solo sobre el precio del producto, no sobre el envio.
 - **Fotos**: se envian como URLs (`pictures: [{ source: url }]`); es la
   propia API de MercadoLibre la que las descarga, no hace falta subirlas vos.
-- **Condicion, tipo de publicacion, stock y envio**: configurables por env
+- **Stock**: si "Disponible en Amazon" esta destildado, se publica con
+  `available_quantity: 0`.
+- **Condicion, tipo de publicacion y envio**: configurables por env
   (`ML_CONDITION`, `ML_LISTING_TYPE_ID`, `ML_DEFAULT_QUANTITY`,
   `ML_SHIPPING_MODE`).
 
@@ -154,11 +199,16 @@ Ver `.env.example` para la lista completa y comentada. Las mas relevantes:
 - `ML_SITE_ID`: sitio de MercadoLibre donde publicas (`MLA` Argentina, `MLM`
   Mexico, `MLB` Brasil, etc.)
 - `PRICE_FX_RATE` / `PRICE_MARKUP_PERCENT`: como se calcula el precio final
-- `AUTO_PUBLISH`: si `true`, cada URL encolada se publica automaticamente
-  apenas se termina de scrapear; si `false`, queda en estado `scraped` para
-  revisar/publicar manualmente
+- `INTL_SHIPPING_BASE_COST_USD` / `INTL_SHIPPING_COST_PER_KG`: como se
+  estima el costo de envio internacional por defecto
+- `AUTO_PUBLISH`: si `false` (default), cada URL encolada queda en estado
+  `scraped` para revisar/editar en el panel antes de publicar; si `true`,
+  se publica sola apenas termina el scraping
 - `QUEUE_CONCURRENCY`: cuantos jobs procesa el worker en simultaneo (dejalo
   en 1 si queres ser mas conservador con Amazon)
+- `PLAYWRIGHT_CHROMIUM_PATH`: ruta a un binario de Chromium ya instalado,
+  util en entornos donde la version de Playwright del proyecto no coincide
+  con el Chromium disponible (evita que intente descargar uno nuevo)
 
 ## Consideraciones legales e importantes
 
@@ -174,9 +224,9 @@ Ver `.env.example` para la lista completa y comentada. Las mas relevantes:
 - Amazon puede mostrar un captcha si detecta trafico automatizado; en ese
   caso el job queda en `failed` con el error correspondiente. Considera bajar
   la concurrencia, subir los delays o usar un proxy (`SCRAPER_PROXY_URL`).
-- El precio, categoria y atributos sugeridos son un punto de partida:
-  revisalos antes de dar por buena una publicacion automatica, sobre todo al
-  principio.
+- El precio, categoria y atributos sugeridos son un punto de partida: por
+  eso el panel de revision existe — revisalos antes de publicar, sobre todo
+  al principio.
 
 ## Tests
 
@@ -184,5 +234,7 @@ Ver `.env.example` para la lista completa y comentada. Las mas relevantes:
 npm test
 ```
 
-Cubren el parseo de precios/ratings/ASIN del scraper y el mapeo de producto
-a payload de MercadoLibre (incluyendo calculo de precio y validaciones).
+Cubren el parseo de precios/ratings/modelo/peso/codigo de barras del
+scraper, el calculo de envio y armado del listing inicial, y el mapeo del
+listing (editado) al payload de MercadoLibre (precio, atributos, stock,
+validaciones).

@@ -2,7 +2,8 @@ import { Worker, type Job } from "bullmq";
 import { config } from "../config.js";
 import { connection, QUEUE_NAME, type AmazonImportJobData } from "./queue.js";
 import { scrapeAmazonProduct } from "../scraper/amazonScraper.js";
-import { publishScrapedProduct } from "../mercadolibre/publishProduct.js";
+import { publishListing } from "../mercadolibre/publishProduct.js";
+import { buildInitialListing } from "../services/listing.js";
 import { updateJob } from "../db/jobStore.js";
 
 async function processImportJob(job: Job<AmazonImportJobData>): Promise<void> {
@@ -12,16 +13,17 @@ async function processImportJob(job: Job<AmazonImportJobData>): Promise<void> {
   updateJob(jobId, { status: "scraping" });
 
   const product = await scrapeAmazonProduct(url);
-  updateJob(jobId, { status: "scraped", product });
+  const listing = buildInitialListing(product);
+  updateJob(jobId, { status: "scraped", product, listing });
   console.log(`[worker] Scraping OK: "${product.title}" (${product.images.length} imagenes)`);
 
   if (!autoPublish) {
-    console.log(`[worker] autoPublish=false, dejo el job en estado 'scraped' para publicacion manual`);
+    console.log(`[worker] autoPublish=false, dejo el job en estado 'scraped' para revisar/publicar manualmente`);
     return;
   }
 
   updateJob(jobId, { status: "publishing" });
-  const mercadolibre = await publishScrapedProduct(product);
+  const mercadolibre = await publishListing(listing);
 
   updateJob(jobId, { status: "published", mercadolibre });
   console.log(`[worker] Publicado en MercadoLibre: ${mercadolibre.permalink}`);

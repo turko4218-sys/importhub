@@ -15,6 +15,7 @@ db.exec(`
     status TEXT NOT NULL,
     error TEXT,
     product TEXT,
+    listing TEXT,
     mercadolibre TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -27,6 +28,7 @@ interface JobRow {
   status: JobStatus;
   error: string | null;
   product: string | null;
+  listing: string | null;
   mercadolibre: string | null;
   created_at: string;
   updated_at: string;
@@ -39,6 +41,7 @@ function rowToRecord(row: JobRow): JobRecord {
     status: row.status,
     error: row.error,
     product: row.product ? JSON.parse(row.product) : null,
+    listing: row.listing ? JSON.parse(row.listing) : null,
     mercadolibre: row.mercadolibre ? JSON.parse(row.mercadolibre) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -48,8 +51,8 @@ function rowToRecord(row: JobRow): JobRecord {
 export function createJob(id: string, url: string): JobRecord {
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO jobs (id, url, status, error, product, mercadolibre, created_at, updated_at)
-     VALUES (?, ?, 'queued', NULL, NULL, NULL, ?, ?)`
+    `INSERT INTO jobs (id, url, status, error, product, listing, mercadolibre, created_at, updated_at)
+     VALUES (?, ?, 'queued', NULL, NULL, NULL, NULL, ?, ?)`
   ).run(id, url, now, now);
   return getJob(id)!;
 }
@@ -65,11 +68,12 @@ export function updateJob(id: string, patch: Partial<Omit<JobRecord, "id" | "cre
   };
 
   db.prepare(
-    `UPDATE jobs SET status = ?, error = ?, product = ?, mercadolibre = ?, updated_at = ? WHERE id = ?`
+    `UPDATE jobs SET status = ?, error = ?, product = ?, listing = ?, mercadolibre = ?, updated_at = ? WHERE id = ?`
   ).run(
     merged.status,
     merged.error,
     merged.product ? JSON.stringify(merged.product) : null,
+    merged.listing ? JSON.stringify(merged.listing) : null,
     merged.mercadolibre ? JSON.stringify(merged.mercadolibre) : null,
     merged.updatedAt,
     id

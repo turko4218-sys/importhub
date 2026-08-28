@@ -29,6 +29,7 @@ interface RawExtraction {
   ratingText: string | null;
   ratingCountText: string | null;
   availability: string | null;
+  videos: string[];
 }
 
 async function extractFromPage(page: Page): Promise<RawExtraction> {
@@ -111,6 +112,14 @@ async function extractFromPage(page: Page): Promise<RawExtraction> {
     const ratingCountText = text(document.querySelector("#acrCustomerReviewText"));
     const availability = text(document.querySelector("#availability span")) ?? text(document.querySelector("#availability"));
 
+    const videos = Array.from(
+      new Set(
+        Array.from(document.querySelectorAll<HTMLElement>("[data-video-url]"))
+          .map((el) => el.getAttribute("data-video-url"))
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+
     return {
       title,
       brand,
@@ -122,6 +131,7 @@ async function extractFromPage(page: Page): Promise<RawExtraction> {
       ratingText,
       ratingCountText,
       availability,
+      videos,
     };
   });
 }
@@ -158,7 +168,52 @@ export function parsePrice(priceText: string | null): { price: number | null; cu
   return { price: Number.isFinite(price) ? price : null, currency };
 }
 
-export function cleanBrand(brand: string | null, specifications: Record<string, string>): string | null {
+export function findSpec(specifications: Record<string, string>, patterns: RegExp[]): string | null {
+  for (const [key, value] of Object.entries(specifications)) {
+    if (patterns.some((pattern) => pattern.test(key))) return value;
+  }
+  return null;
+}
+
+export function extractModel(specifications: Record<string, string>): string | null {
+  return findSpec(specifications, [/^modelo$/i, /numero de modelo/i, /model number/i, /^model$/i]);
+}
+
+export function extractBarcode(specifications: Record<string, string>): string | null {
+  const raw = findSpec(specifications, [/^upc$/i, /^ean$/i, /^gtin$/i, /codigo de barras/i]);
+  return raw ? raw.replace(/[^0-9]/g, "") || raw : null;
+}
+
+const WEIGHT_UNIT_TO_KG: Record<string, number> = {
+  kg: 1,
+  kilogram: 1,
+  kilogramos: 1,
+  g: 0.001,
+  gram: 0.001,
+  gramos: 0.001,
+  lb: 0.453592,
+  lbs: 0.453592,
+  pound: 0.453592,
+  pounds: 0.453592,
+  libras: 0.453592,
+  oz: 0.0283495,
+  ounce: 0.0283495,
+  ounces: 0.0283495,
+  onzas: 0.0283495,
+};
+
+export function parseWeightKg(specifications: Record<string, string>): number | null {
+  const raw = findSpec(specifications, [/peso/i, /weight/i]);
+  if (!raw) return null;
+  const match = raw.match(/([0-9]+(?:[.,][0-9]+)?)\s*([a-zA-Z]+)/);
+  if (!match) return null;
+  const value = Number.parseFloat(match[1].replace(",", "."));
+  const unit = WEIGHT_UNIT_TO_KG[match[2].toLowerCase()];
+  if (!Number.isFinite(value) || !unit) return null;
+  return Math.round(value * unit * 1000) / 1000;
+}
+
+function cleanBrand(brand: string | null, specifications: Record<string, string>): string | null {
   const fromSpecs = specifications["Marca"] ?? specifications["Brand"];
   if (fromSpecs) return fromSpecs;
   if (!brand) return null;
@@ -166,6 +221,11 @@ export function cleanBrand(brand: string | null, specifications: Record<string, 
     .replace(/^(visita la tienda de|visit the)\s+/i, "")
     .replace(/\s+(store|tienda)$/i, "")
     .trim();
+}
+
+function isInStock(availability: string | null): boolean {
+  if (!availability) return true;
+  return !/no disponible|agotado|out of stock|currently unavailable|no.?longer available/i.test(availability);
 }
 
 export function parseRating(ratingText: string | null): number | null {
@@ -224,15 +284,20 @@ export async function scrapeAmazonProduct(url: string): Promise<ScrapedProduct> 
       asin: extractAsinFromUrl(url),
       title: raw.title,
       brand: cleanBrand(raw.brand, raw.specifications),
+      model: extractModel(raw.specifications),
+      barcode: extractBarcode(raw.specifications),
       price,
       currency,
+      weightKg: parseWeightKg(raw.specifications),
       images: raw.images.map(toHighResImage).filter((value, index, all) => all.indexOf(value) === index).slice(0, 12),
+      videos: raw.videos,
       description: raw.descriptionParagraphs.join("\n\n"),
       bulletPoints: raw.bulletPoints,
       specifications: raw.specifications,
       rating: parseRating(raw.ratingText),
       ratingCount: parseRatingCount(raw.ratingCountText),
       availability: raw.availability,
+      inStock: isInStock(raw.availability),
       scrapedAt: new Date().toISOString(),
     };
 

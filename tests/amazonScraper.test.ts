@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   extractAsinFromUrl,
+  extractBarcode,
+  extractModel,
   parsePrice,
   parseRating,
+  parseWeightKg,
   toHighResImage,
 } from "../src/scraper/amazonScraper.js";
 
@@ -47,6 +50,41 @@ describe("parseRating", () => {
 
   it("retorna null si no hay match", () => {
     expect(parseRating("Sin calificaciones")).toBeNull();
+  });
+});
+
+describe("extractModel", () => {
+  it("encuentra el modelo en la tabla de especificaciones", () => {
+    expect(extractModel({ Modelo: "AS-100", Color: "Negro" })).toBe("AS-100");
+    expect(extractModel({ "Item model number": "AS-100" })).toBe("AS-100");
+  });
+
+  it("retorna null si no hay modelo", () => {
+    expect(extractModel({ Color: "Negro" })).toBeNull();
+  });
+});
+
+describe("extractBarcode", () => {
+  it("encuentra y limpia un UPC/EAN", () => {
+    expect(extractBarcode({ UPC: "012-345-678901" })).toBe("012345678901");
+  });
+
+  it("retorna null si no hay codigo de barras", () => {
+    expect(extractBarcode({ Color: "Negro" })).toBeNull();
+  });
+});
+
+describe("parseWeightKg", () => {
+  it("convierte gramos a kg", () => {
+    expect(parseWeightKg({ "Peso del articulo": "250 g" })).toBe(0.25);
+  });
+
+  it("convierte libras a kg", () => {
+    expect(parseWeightKg({ "Item Weight": "1.5 pounds" })).toBeCloseTo(0.680, 2);
+  });
+
+  it("retorna null si no hay peso reconocible", () => {
+    expect(parseWeightKg({ Color: "Negro" })).toBeNull();
   });
 });
 
