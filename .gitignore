@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+*.log
+data/*.sqlite
+data/*.sqlite-journal
+.ml-token.json
+playwright-report/
+test-results/
