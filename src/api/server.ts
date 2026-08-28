@@ -8,12 +8,15 @@ import { enqueueAmazonUrl, enqueueAmazonUrls } from "../queue/queue.js";
 import { getJob, listJobs, updateJob } from "../db/jobStore.js";
 import { publishListing } from "../mercadolibre/publishProduct.js";
 import { estimateShippingCostUsd } from "../services/listing.js";
+import { basicAuthMiddleware } from "./basicAuth.js";
 import type { Listing } from "../types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(cors());
+app.get("/health", (_req, res) => res.json({ ok: true }));
+app.use(basicAuthMiddleware());
 app.use(express.json());
 app.use(express.static(join(__dirname, "../../public")));
 
@@ -113,8 +116,6 @@ app.post("/api/jobs/:id/publish", async (req, res) => {
     res.status(500).json({ error: message });
   }
 });
-
-app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.listen(config.port, () => {
   console.log(`[api] Escuchando en http://localhost:${config.port}`);

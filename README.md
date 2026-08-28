@@ -118,6 +118,67 @@ Abri **http://localhost:3000** en el navegador:
 La lista de la izquierda muestra todos los jobs encolados con su estado, asi
 podes importar varios links seguidos y despues ir editando uno por uno.
 
+## Acceder desde otra PC / por internet (no solo `localhost`)
+
+El servidor ya escucha en todas las interfaces de red, asi que en la misma
+red local alcanza con usar la IP de la maquina que lo corre en vez de
+`localhost` (ej. `http://192.168.1.50:3000`). Para acceder desde otra
+ubicacion (otra red, o simplemente por internet) sin desplegar nada, la
+forma mas simple es un **tunel**.
+
+### 0. Primero: activa el login (obligatorio para exponerlo)
+
+Sin esto, cualquiera que llegue a la URL puede publicar en tu cuenta de
+MercadoLibre. En tu `.env`:
+
+```bash
+APP_USERNAME=elegí-un-usuario
+APP_PASSWORD=elegí-una-contraseña-larga
+```
+
+Reinicia `npm run dev` despues de setear esto. El navegador va a pedir esas
+credenciales (HTTP Basic Auth) antes de mostrar cualquier pantalla, y la
+API tambien las exige.
+
+### 1. Levanta la app localmente
+
+```bash
+npm run dev
+```
+
+### 2. Abri un tunel hacia `http://localhost:3000`
+
+**Opcion A — Cloudflare Tunnel** (no requiere cuenta para un tunel rapido):
+
+```bash
+# instalar (una vez): https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+cloudflared tunnel --url http://localhost:3000
+```
+
+Te da una URL tipo `https://algo-al-azar.trycloudflare.com` que anda desde
+cualquier lado mientras el comando siga corriendo.
+
+**Opcion B — ngrok** (requiere una cuenta gratuita):
+
+```bash
+ngrok http 3000
+```
+
+Te da una URL tipo `https://algo.ngrok-free.app`.
+
+Cualquiera de las dos URLs pide usuario/contraseña (lo que configuraste en
+el paso 0) antes de dejar entrar. Cerra el tunel cuando termines de usarlo.
+
+### 3. ¿Necesitas que quede prendido todo el tiempo, no solo mientras corre el tunel?
+
+Eso ya es un despliegue permanente: subir el proyecto a un servidor/VPS
+(o un servicio tipo Railway/Render/Fly.io) con Node, Redis y Playwright
+instalados, dejarlo corriendo con un gestor de procesos (`pm2`, un
+servicio de systemd, o el propio servicio del hosting), y opcionalmente un
+dominio + HTTPS con un reverse proxy (nginx + Let's Encrypt). Es un paso
+mas grande — avisame si es lo que necesitas y te armo esa parte
+especificamente para el hosting que uses.
+
 ## Uso: linea de comandos / API (para lotes grandes)
 
 ### Encolar una URL de Amazon
@@ -223,6 +284,10 @@ publica en MercadoLibre es siempre el `listing`.
 
 Ver `.env.example` para la lista completa y comentada. Las mas relevantes:
 
+- `APP_USERNAME` / `APP_PASSWORD`: usuario/contraseña del panel (HTTP Basic
+  Auth). Vacios = sin login (solo para uso local en tu propia PC). Son
+  **obligatorios** antes de exponer la app fuera de tu maquina (otra PC,
+  un tunel, un servidor).
 - `ML_SITE_ID`: sitio de MercadoLibre donde publicas (`MLA` Argentina, `MLM`
   Mexico, `MLB` Brasil, etc.)
 - `PRICE_FX_RATE` / `PRICE_MARKUP_PERCENT`: como se calcula el precio final

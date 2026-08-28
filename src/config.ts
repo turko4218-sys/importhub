@@ -63,5 +63,10 @@ export const config = {
 
   autoPublish: optional("AUTO_PUBLISH", "false").toLowerCase() === "true",
 
+  auth: {
+    username: optional("APP_USERNAME"),
+    password: optional("APP_PASSWORD"),
+  },
+
   dbPath: optional("DB_PATH", "data/importhub.sqlite"),
 };
