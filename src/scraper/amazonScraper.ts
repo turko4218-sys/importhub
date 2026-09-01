@@ -1,9 +1,31 @@
 import type { Page } from "playwright";
+import { mkdir, writeFile } from "node:fs/promises";
 import { launchBrowser, newContext, humanDelay } from "./browser.js";
 import { config } from "../config.js";
 import type { ScrapedProduct } from "../types.js";
 
 export class ScrapeError extends Error {}
+
+const DEBUG_DIR = "data/debug";
+
+/**
+ * Guarda una captura de pantalla y el HTML de la pagina cuando el scraping
+ * falla de forma inesperada, para poder diagnosticar sin acceso directo al
+ * navegador (por ejemplo, si Amazon esta mostrando un captcha distinto al
+ * que ya detectamos, o cambio el layout).
+ */
+async function saveDebugArtifacts(page: Page, reason: string): Promise<string | null> {
+  try {
+    await mkdir(DEBUG_DIR, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const base = `${DEBUG_DIR}/${stamp}-${reason}`;
+    await page.screenshot({ path: `${base}.png`, fullPage: false });
+    await writeFile(`${base}.html`, await page.content(), "utf-8");
+    return `${base}.png`;
+  } catch {
+    return null;
+  }
+}
 
 export function extractAsinFromUrl(url: string): string | null {
   const patterns = [/\/dp\/([A-Z0-9]{10})/, /\/gp\/product\/([A-Z0-9]{10})/, /\/product\/([A-Z0-9]{10})/];
@@ -282,19 +304,28 @@ export async function scrapeAmazonProduct(url: string): Promise<ScrapedProduct> 
 
     const captchaBlock = await page.$("form[action*='validateCaptcha']");
     if (captchaBlock) {
-      throw new ScrapeError("Amazon solicito un captcha; reintenta mas tarde o usa un proxy distinto.");
+      const screenshot = await saveDebugArtifacts(page, "captcha");
+      throw new ScrapeError(
+        `Amazon solicito un captcha; reintenta mas tarde o usa un proxy distinto.${screenshot ? ` (captura: ${screenshot})` : ""}`
+      );
     }
 
     const notFound = await page.$("#g");
     const title = await page.$("#productTitle");
     if (!title && notFound) {
-      throw new ScrapeError("La pagina de producto no existe o fue removida.");
+      const screenshot = await saveDebugArtifacts(page, "not-found");
+      throw new ScrapeError(
+        `La pagina de producto no existe o fue removida.${screenshot ? ` (captura: ${screenshot})` : ""}`
+      );
     }
 
     const raw = await extractFromPage(page);
 
     if (!raw.title) {
-      throw new ScrapeError("No se pudo extraer el titulo del producto; el layout de la pagina puede haber cambiado.");
+      const screenshot = await saveDebugArtifacts(page, "no-title");
+      throw new ScrapeError(
+        `No se pudo extraer el titulo del producto; el layout de la pagina puede haber cambiado.${screenshot ? ` (captura: ${screenshot})` : ""}`
+      );
     }
 
     const { price, currency } = parsePrice(raw.priceText);

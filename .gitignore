@@ -4,6 +4,7 @@ dist/
 *.log
 data/*.sqlite
 data/*.sqlite-journal
+data/debug/
 .ml-token.json
 playwright-report/
 test-results/
