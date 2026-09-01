@@ -97,8 +97,13 @@ npm run dev
 
 Levanta la API (con el panel web) y el worker juntos, en una sola terminal,
 con la salida de cada uno diferenciada por color/prefijo. Si preferis
-verlos por separado, `npm run dev:api` y `npm run dev:worker` en dos
-terminales hacen lo mismo.
+verlos por separado, corre `npm run build` una vez y despues `npm run dev:api`
+y `npm run dev:worker` en dos terminales.
+
+> Si en tu entorno (por ejemplo GitHub Codespaces) el scraper falla con un
+> error de Chromium tipo `error while loading shared libraries: libatk...`,
+> corre una vez `sudo npx playwright install-deps chromium` para instalar
+> las dependencias de sistema que le faltan al navegador headless.
 
 ## Uso: panel web (recomendado)
 

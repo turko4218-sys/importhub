@@ -10,9 +10,10 @@
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "build": "tsc -p tsconfig.json",
-    "dev": "concurrently -n api,worker -c blue,green \"npm:dev:api\" \"npm:dev:worker\"",
-    "dev:api": "tsx watch src/api/server.ts",
-    "dev:worker": "tsx watch src/queue/worker.ts",
+    "dev": "npm run build && concurrently -n tsc,api,worker -c yellow,blue,green \"npm:watch:tsc\" \"npm:dev:api\" \"npm:dev:worker\"",
+    "watch:tsc": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "dev:api": "node --watch dist/api/server.js",
+    "dev:worker": "node --watch dist/queue/worker.js",
     "start:api": "node dist/api/server.js",
     "start:worker": "node dist/queue/worker.js",
     "enqueue": "tsx src/cli/enqueue.ts",

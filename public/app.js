@@ -118,13 +118,13 @@ function renderEditor(job) {
   const statusEl = editorEl.querySelector("#editor-status");
   const resultEl = editorEl.querySelector("#ml-result");
 
-  if (!listing) {
+  if (job.status === "failed" && job.error) {
+    statusEl.textContent = `Error: ${job.error}`;
+    statusEl.className = "hint error";
+  } else if (!listing) {
     statusEl.textContent = `Estado actual: ${statusLabel(job.status)}. Todavia no hay datos para editar.`;
   } else if (job.status === "published" && job.mercadolibre?.permalink) {
     resultEl.innerHTML = `Publicado: <a href="${job.mercadolibre.permalink}" target="_blank" rel="noopener">${job.mercadolibre.permalink}</a>`;
-  } else if (job.status === "failed" && job.error) {
-    statusEl.textContent = `Error: ${job.error}`;
-    statusEl.className = "hint error";
   }
 
   editorEl.querySelector("#save-btn").addEventListener("click", () => saveListing(job.id));

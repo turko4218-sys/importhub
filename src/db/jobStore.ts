@@ -5,8 +5,12 @@ import { config } from "../config.js";
 import type { JobKind, JobRecord, JobStatus } from "../types.js";
 
 mkdirSync(dirname(config.dbPath), { recursive: true });
-const db = new Database(config.dbPath);
+// timeout: la API y el worker son procesos separados que abren el mismo
+// archivo; sin esto, si arrancan al mismo instante uno puede toparse con
+// "database is locked" en vez de esperar a que el otro termine.
+const db = new Database(config.dbPath, { timeout: 5000 });
 db.pragma("journal_mode = WAL");
+db.pragma("busy_timeout = 5000");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS jobs (
